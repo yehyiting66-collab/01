@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>逾期公文監測儀表板</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js DataLabels Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    <!-- SheetJS for Excel Reading -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
+            <div class="flex items-center space-x-3">
+                <i class="fa-solid me-2 fa-file-invoice text-emerald-400 text-2xl"></i>
+                <h1 class="text-xl font-bold tracking-wide">逾期公文監測儀表板</h1>
+            </div>
+            
+            <div class="flex items-center space-x-4">
+                <!-- Date Filter -->
+                <div class="flex items-center space-x-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <i class="fa-regular fa-calendar text-slate-400"></i>
+                    <label for="dateSelect" class="text-xs text-slate-300">監測日期:</label>
+                    <select id="dateSelect" onchange="handleDateChange()" class="bg-slate-900 text-xs text-white rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                        <option value="ALL">全部日期/最新</option>
+                    </select>
+                </div>
+
+                <!-- Excel Upload -->
+                <label class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-2 rounded-lg cursor-pointer transition flex items-center shadow">
+                    <i class="fa-solid fa-file-excel mr-1.5"></i> 匯入 Excel
+                    <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="handleFileUpload(event)">
+                </label>
+            </div>
+        </div>
+        
+        <!-- Tab Navigation -->
+        <nav class="bg-slate-800 border-t border-slate-700 px-4 sm:px-8 flex space-x-6 overflow-x-auto">
+            <button onclick="switchTab('tab1')" id="btn-tab1" class="tab-btn py-3 text-sm font-medium text-emerald-400 border-b-2 border-emerald-400 flex items-center space-x-2">
+                <i class="fa-solid fa-chart-pie"></i><span>1. 全院逾期狀況</span>
+            </button>
+            <button onclick="switchTab('tab2')" id="btn-tab2" class="tab-btn py-3 text-sm font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center space-x-2">
+                <i class="fa-solid fa-building"></i><span>2. 各單位逾期狀況</span>
+            </button>
+            <button onclick="switchTab('tab3')" id="btn-tab3" class="tab-btn py-3 text-sm font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center space-x-2">
+                <i class="fa-solid fa-chart-line"></i><span>3. 各單位趨勢圖</span>
+            </button>
+            <button onclick="switchTab('tab4')" id="btn-tab4" class="tab-btn py-3 text-sm font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center space-x-2">
+                <i class="fa-solid fa-list-check"></i><span>4. 完整明細</span>
+            </button>
+            <button onclick="switchTab('tab5')" id="btn-tab5" class="tab-btn py-3 text-sm font-medium text-amber-400 border-b-2 border-transparent hover:text-amber-300 flex items-center space-x-2 ml-auto">
+                <i class="fa-solid fa-user-shield"></i><span>5. 院長室主管專區</span>
+            </button>
+        </nav>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full">
+
+        <!-- TAB 1: 全院逾期狀況 -->
+        <section id="tab1" class="tab-content space-y-6">
+            <!-- Summary KPI Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                <div onclick="openFilteredList('ALL')" class="cursor-pointer bg-white p-3 rounded-xl shadow-sm border border-slate-200 hover:border-emerald-500 transition">
+                    <p class="text-xs text-slate-500 font-medium">總件數</p>
+                    <h3 id="kpi-total" class="text-xl font-bold text-slate-800 mt-1">0</h3>
+                    <p class="text-[10px] text-slate-400 mt-1">不含院長室主管</p>
+                </div>
+                <div onclick="openFilteredList('0')" class="cursor-pointer bg-white p-3 rounded-xl shadow-sm border border-slate-200 hover:border-emerald-500 transition">
+                    <p class="text-xs text-emerald-600 font-medium">0 天 (正常)</p>
+                    <h3 id="kpi-0d" class="text-xl font-bold text-emerald-600 mt-1">0</h3>
+                    <p id="kpi-0d-rate" class="text-[10px] text-emerald-600/80 mt-1">0%</p>
+                </div>
+                <div onclick="openFilteredList('1-3')" class="cursor-pointer bg-white p-3 rounded-xl shadow-sm border border-slate-200 hover:border-blue-500 transition">
+                    <p class="text-xs text-blue-600 font-medium">1 ~ 3 天</p>
+                    <h3 id="kpi-1-3d" class="text-xl font-bold text-blue-600 mt-1">0</h3>
+                    <p id="kpi-1-3d-rate" class="text-[10px] text-blue-600/80 mt-1">0%</p>
+                </div>
+                <div onclick="openFilteredList('4-7')" class="cursor-pointer bg-white p-3 rounded-xl shadow-sm border border-slate-200 hover:border-cyan-500 transition">
+                    <p class="text-xs text-cyan-600 font-medium">4 ~ 7 天</p>
+                    <h3 id="kpi-4-7d" class="text-xl font-bold text-cyan-600 mt-1">0</h3>
+                    <p id="kpi-4-7d-rate" class="text-[10px] text-cyan-600/80 mt-1">0%</p>
+                </div>
+                <div onclick="openFilteredList('8-14')" class="cursor-pointer bg-white p-3 rounded-xl shadow-sm border border-slate-200 hover:border-purple-500 transition">
+                    <p class="text-xs text-purple-600 font-medium">8 ~ 14 天</p>
+                    <h3 id="kpi-8-14d" class="text-xl font-bold text-purple-600 mt-1">0</h3>
+                    <p id="kpi-8-14d-rate" class="text-[10px] text-purple-600/80 mt-1">0%</p>
+                </div>
+                <div onclick="openFilteredList('15+')" class="cursor-pointer bg-white p-3 rounded-xl shadow-sm border border-slate-200 hover:border-rose-500 transition">
+                    <p class="text-xs text-rose-600 font-medium">15天以上</p>
+                    <h3 id="kpi-15d" class="text-xl font-bold text-rose-600 mt-1">0</h3>
+                    <p id="kpi-15d-rate" class="text-[10px] text-rose-600/80 mt-1">0%</p>
+                </div>
+                <div class="bg-gradient-to-br from-rose-500 to-red-600 text-white p-3 rounded-xl shadow-sm">
+                    <p class="text-xs opacity-90 font-medium">總逾期率 (≥8天)</p>
+                    <h3 id="kpi-overdue-rate" class="text-xl font-extrabold mt-1">0%</h3>
+                    <p class="text-[10px] opacity-75 mt-1">(8-14天 + 15天+)</p>
+                </div>
+                <div class="bg-gradient-to-br from-slate-700 to-slate-800 text-white p-3 rounded-xl shadow-sm">
+                    <p class="text-xs opacity-90 font-medium">總平均天數</p>
+                    <h3 id="kpi-avg-days" class="text-xl font-extrabold mt-1">0 天</h3>
+                    <p class="text-[10px] opacity-75 mt-1">全院平均個人天數</p>
+                </div>
+            </div>
+
+            <!-- Full Hospital Trend Chart -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center">
+                        <i class="fa-solid fa-chart-column text-emerald-600 mr-2"></i>全院公文逾期歷史趨勢圖
+                    </h2>
+                    <span class="text-xs text-slate-500">柱狀：個人天數分層堆疊 | 折線：平均天數 & 7天以上逾期率</span>
+                </div>
+                <div class="h-96 relative">
+                    <canvas id="fullHospitalTrendChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: 各單位逾期狀況 -->
+        <section id="tab2" class="tab-content hidden space-y-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-slate-800">各單位逾期統計指標表</h2>
+                <input type="text" id="deptSearchInput" onkeyup="filterDeptTable()" placeholder="搜尋單位..." class="text-sm px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500">
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto custom-scrollbar max-h-[600px]">
+                    <table class="w-full text-sm text-left text-slate-600">
+                        <thead class="text-xs text-slate-700 uppercase bg-slate-100 sticky top-0 z-10">
+                            <tr>
+                                <th class="px-4 py-3">歸屬部門/單位</th>
+                                <th class="px-4 py-3 text-right">總件數</th>
+                                <th class="px-4 py-3 text-right">0天</th>
+                                <th class="px-4 py-3 text-right">1~3天</th>
+                                <th class="px-4 py-3 text-right">4~7天</th>
+                                <th class="px-4 py-3 text-right">8~14天</th>
+                                <th class="px-4 py-3 text-right">15天以上</th>
+                                <th class="px-4 py-3 text-right">逾期率 (≥8天)</th>
+                                <th class="px-4 py-3 text-right">平均天數</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deptTableBody" class="divide-y divide-slate-200">
+                            <!-- Dynamic Content -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: 各單位之趨勢圖 -->
+        <section id="tab3" class="tab-content hidden space-y-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <label class="text-sm font-bold text-slate-700">選擇部門單位：</label>
+                    <select id="deptTrendSelect" onchange="renderDeptTrendChart()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </select>
+                </div>
+                <div class="flex space-x-4 text-xs font-medium">
+                    <span id="deptSummary0-7" class="bg-slate-100 px-3 py-1 rounded-full text-slate-700">0~7天件數: 0</span>
+                    <span id="deptSummary7+" class="bg-rose-50 px-3 py-1 rounded-full text-rose-700">7天以上件數: 0</span>
+                    <span id="deptSummaryAvg" class="bg-blue-50 px-3 py-1 rounded-full text-blue-700">平均天數: 0</span>
+                    <span id="deptSummaryRate" class="bg-amber-50 px-3 py-1 rounded-full text-amber-700">逾期率: 0%</span>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="h-96 relative">
+                    <canvas id="deptTrendChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: 完整明細 -->
+        <section id="tab4" class="tab-content hidden space-y-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+                <div class="flex items-center space-x-2">
+                    <input type="text" id="detailSearchInput" onkeyup="filterDetailTable()" placeholder="關鍵字搜尋 (簽核者、表單...)" class="text-sm px-3 py-1.5 border border-slate-300 rounded-lg w-64 focus:ring-1 focus:ring-emerald-500">
+                    <select id="detailDeptFilter" onchange="filterDetailTable()" class="text-sm px-3 py-1.5 border border-slate-300 rounded-lg">
+                        <option value="ALL">全部單位</option>
+                    </select>
+                </div>
+                <button onclick="exportToCSV()" class="bg-slate-700 hover:bg-slate-800 text-white text-xs px-3 py-2 rounded-lg transition">
+                    <i class="fa-solid fa-download mr-1"></i> 匯出 CSV
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto custom-scrollbar max-h-[600px]">
+                    <table class="w-full text-xs text-left text-slate-600">
+                        <thead class="text-xs text-slate-700 uppercase bg-slate-100 sticky top-0 z-10">
+                            <tr>
+                                <th class="px-3 py-2">序號</th>
+                                <th class="px-3 py-2">監測日期</th>
+                                <th class="px-3 py-2">歸屬單位</th>
+                                <th class="px-3 py-2">原始單位</th>
+                                <th class="px-3 py-2">簽核者</th>
+                                <th class="px-3 py-2">個人天數</th>
+                                <th class="px-3 py-2">逾期天數</th>
+                                <th class="px-3 py-2">表單</th>
+                                <th class="px-3 py-2">表單狀態</th>
+                                <th class="px-3 py-2">創簽人</th>
+                                <th class="px-3 py-2">創簽人部門</th>
+                                <th class="px-3 py-2">速別</th>
+                                <th class="px-3 py-2">簽核類別</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detailTableBody" class="divide-y divide-slate-200">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 5: 院長室主管專區 -->
+        <section id="tab5" class="tab-content hidden space-y-6">
+            <div class="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl flex justify-between items-center">
+                <div>
+                    <h2 class="text-lg font-bold text-amber-900">院長室主管公文逾期統計</h2>
+                    <p class="text-xs text-amber-700 mt-0.5">包含院長室指定主管（合併代理人）與斗六慈院簡瑞騰院長之統計，本區資料已自全院統計中排除。</p>
+                </div>
+            </div>
+
+            <!-- Director Summary Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">0~7 天件數 (正常)</p>
+                    <h3 id="dir-kpi-0-7" class="text-2xl font-bold text-emerald-600 mt-1">0</h3>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">7天以上件數 (逾期)</p>
+                    <h3 id="dir-kpi-7plus" class="text-2xl font-bold text-rose-600 mt-1">0</h3>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">平均天數</p>
+                    <h3 id="dir-kpi-avg" class="text-2xl font-bold text-blue-600 mt-1">0 天</h3>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">主管逾期率</p>
+                    <h3 id="dir-kpi-rate" class="text-2xl font-bold text-amber-600 mt-1">0%</h3>
+                </div>
+            </div>
+
+            <!-- Director Trend Chart -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="text-md font-bold text-slate-800 mb-4">主管逾期歷史趨勢</h3>
+                <div class="h-80 relative">
+                    <canvas id="directorTrendChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Director Detail Breakdown -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 bg-slate-50 border-b border-slate-200 font-bold text-slate-700 text-sm">
+                    主管個人明細統計 (合併職務代理人)
+                </div>
+                <table class="w-full text-xs text-left text-slate-600">
+                    <thead class="text-xs text-slate-700 uppercase bg-slate-100">
+                        <tr>
+                            <th class="px-4 py-3">單位</th>
+                            <th class="px-4 py-3">主管 (含代理人合併)</th>
+                            <th class="px-4 py-3 text-right">總件數</th>
+                            <th class="px-4 py-3 text-right">0~7天件數</th>
+                            <th class="px-4 py-3 text-right">>7天件數</th>
+                            <th class="px-4 py-3 text-right">平均天數</th>
+                            <th class="px-4 py-3 text-right">逾期率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="directorTableBody" class="divide-y divide-slate-200">
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal for Card Click Dynamic Lists -->
+    <div id="modalBackdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex justify-center items-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <h3 id="modalTitle" class="text-lg font-bold text-slate-800">公文清單</h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-grow">
+                <table class="w-full text-xs text-left text-slate-600">
+                    <thead class="text-xs text-slate-700 uppercase bg-slate-100 sticky top-0">
+                        <tr>
+                            <th class="px-3 py-2">監測日期</th>
+                            <th class="px-3 py-2">歸屬單位</th>
+                            <th class="px-3 py-2">簽核者</th>
+                            <th class="px-3 py-2">個人天數</th>
+                            <th class="px-3 py-2">表單</th>
+                            <th class="px-3 py-2">創簽人</th>
+                            <th class="px-3 py-2">速別</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modalTableBody" class="divide-y divide-slate-200">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Box -->
+    <div id="toastNotification" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+        <div class="flex items-center space-x-3 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl border border-slate-700">
+            <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+            <span id="toastMessage" class="text-sm font-medium"></span>
+        </div>
+    </div>
+
+    <script>
+        if (typeof ChartDataLabels !== 'undefined') {
+            Chart.register(ChartDataLabels);
+        }
+
+        // --- 1. Mapping Rules Initialization ---
+        const DEPT_MAPPING = {
+            "人力資源室": "人力資源室",
+            "人力資源室人事服務組": "人力資源室",
+            "人力資源室人力發展組": "人力資源室",
+            "人力資源室員工關係組": "人力資源室",
+            "企劃室": "企劃室",
+            "企劃室專案管理組": "企劃室",
+            "企劃室績效管理組": "企劃室",
+            "公共傳播室": "公共傳播室",
+            "品管中心": "品管中心",
+            "品管中心病人安全組": "品管中心",
+            "嘉義慈濟診所": "嘉義慈濟診所",
+            "嘉義慈濟診所行政單位醫事組": "嘉義慈濟診所",
+            "嘉義慈濟診所護理單位": "嘉義慈濟診所",
+            "嘉義慈濟診所護理單位門診": "嘉義慈濟診所",
+            "嘉義慈濟診所醫技單位檢驗醫學組": "嘉義慈濟診所",
+            "嘉義慈濟診所醫技單位活齡運動中心": "嘉義慈濟診所",
+            "國際醫療中心國際醫療組": "國際醫療中心",
+            "工務室": "工務室",
+            "教學部": "教學部",
+            "教學部學習資源組": "教學部",
+            "教學部教學研發組": "教學部",
+            "教學部醫學教育組": "教學部",
+            "斗六慈院品管中心": "斗六慈院",
+            "斗六慈院行政單位行政管理室": "斗六慈院",
+            "斗六慈院行政單位行政管理室企劃暨社區醫療組": "斗六慈院",
+            "斗六慈院行政單位行政管理室總務組": "斗六慈院",
+            "斗六慈院行政單位醫事組": "斗六慈院",
+            "斗六慈院護理單位": "斗六慈院",
+            "斗六慈院護理單位病房": "斗六慈院",
+            "斗六慈院護理單位血液透析室": "斗六慈院",
+            "斗六慈院護理單位門診": "斗六慈院",
+            "斗六慈院醫技單位復健組": "斗六慈院",
+            "斗六慈院醫技單位臨床營養組": "斗六慈院",
+            "營養治療科供膳管理組": "營養治療科",
+            "營養治療科教學研究組": "營養治療科",
+            "社區醫療部健康檢查組": "社區醫療部",
+            "社服室社工組": "社服室",
+            "智慧醫療創新中心": "智慧醫療創新中心",
+            "睡眠中心": "睡眠中心",
+            "總務室": "總務室",
+            "總務室庶務組": "總務室",
+            "總務室庶務組事務股": "總務室",
+            "總務室庶務組環管股": "總務室",
+            "總務室庶務組警勤股": "總務室",
+            "總務室保管組": "總務室",
+            "總務室醫工組": "總務室",
+            "藥學部臨床藥學科": "藥學部",
+            "藥學部藥物調劑科藥物管理組": "藥學部",
+            "護理部": "護理部",
+            "護理部呼吸照護中心": "護理部",
+            "護理部感染控制小組": "護理部",
+            "護理部產後護理之家": "護理部",
+            "護理部轉銜照護中心居家醫療照護組": "護理部",
+            "護理部門診護理站": "護理部",
+            "護理部10B病房": "護理部",
+            "護理部3C身心醫學科病房": "護理部",
+            "護理部5A產兒病房": "護理部",
+            "護理部8B病房": "護理部",
+            "護理部住宿長照機構": "護理部",
+            "護理部供應中心": "護理部",
+            "護理部健檢病房": "護理部",
+            "護理部外科組": "護理部",
+            "護理部小兒加護病房": "護理部",
+            "護理部手術室": "護理部",
+            "護理部獨立科組": "護理部",
+            "護理部產房": "護理部",
+            "財務室": "財務室",
+            "財務室會計組": "財務室",
+            "財務室經營分析組": "財務室",
+            "財務室出納組": "財務室",
+            "財務室成本組": "財務室",
+            "醫事室": "醫事室",
+            "醫事室住院組": "醫事室",
+            "醫事室保險申報組": "醫事室",
+            "醫事室保險申報組健保申報股": "醫事室",
+            "醫事室病歷組": "醫事室",
+            "醫事室病歷組檔案管理股": "醫事室",
+            "醫事室門診組": "醫事室",
+            "醫事室門診組服務股": "醫事室",
+            "醫事室門診組門診股": "醫事室",
+            "醫療部": "醫療部",
+            "醫療部口腔醫學部兒童牙科": "醫療部口腔醫學部",
+            "醫療部中醫部": "醫療部中醫部",
+            "醫療部中醫部內科": "醫療部中醫部",
+            "醫療部中醫部婦兒科": "醫療部中醫部",
+            "醫療部中醫部中醫家庭醫學科": "醫療部中醫部",
+            "醫療部中醫部斗六中醫一般科": "醫療部中醫部",
+            "醫療部內科部內科加護病房": "醫療部內科部",
+            "醫療部內科部心臟內科": "醫療部內科部",
+            "醫療部內科部胸腔內科": "醫療部內科部",
+            "醫療部內科部過敏免疫風濕中心": "醫療部內科部",
+            "醫療部內科部過敏免疫風濕中心風濕科": "醫療部內科部",
+            "醫療部外科部": "醫療部外科部",
+            "醫療部外科部外科加護病房": "醫療部外科部",
+            "醫療部外科部大腸直腸外科": "醫療部外科部",
+            "醫療部外科部移植外科": "醫療部外科部",
+            "醫療部婦產部": "醫療部婦產部",
+            "醫療部婦產部婦科": "醫療部婦產部",
+            "醫療部婦產部產科暨高危險妊娠科": "醫療部婦產部",
+            "醫療部家庭醫學部": "醫療部家庭醫學部",
+            "醫療部家庭醫學部安寧緩和醫療科": "醫療部家庭醫學部",
+            "醫療部家庭醫學部職業醫學科": "醫療部家庭醫學部",
+            "醫療部影像醫學科醫技行政影像醫學組": "影像醫學科",
+            "醫療部復健科": "醫療部復健科",
+            "醫療部急診部": "醫療部急診部",
+            "醫療部急診部災難醫學科": "醫療部急診部",
+            "醫療部放射腫瘤科醫學物理中心": "醫療部放射腫瘤科醫技",
+            "醫療部放射腫瘤科醫事放射組": "醫療部放射腫瘤科醫技",
+            "醫療部放射腫瘤科": "醫療部放射腫瘤科",
+            "醫療部檢驗醫學科一般檢驗組": "檢驗醫學科",
+            "醫療部檢驗醫學科一般檢驗組生化股": "檢驗醫學科",
+            "醫療部檢驗醫學科一般檢驗組血清股": "檢驗醫學科",
+            "醫療部檢驗醫學科一般檢驗組門診鏡檢股": "檢驗醫學科",
+            "醫療部檢驗醫學科細菌分生組": "檢驗醫學科",
+            "醫療部檢驗醫學科輸血醫學組": "檢驗醫學科",
+            "醫療部泌尿科": "醫療部泌尿科",
+            "醫療部眼科": "醫療部眼科",
+            "醫療部神經科": "醫療部神經科",
+            "醫療部耳鼻喉頭頸外科聽語中心": "醫療部耳鼻喉頭頸外科",
+            "醫療部身心醫學科": "醫療部身心醫學科",
+            "醫療部身心醫學科成癮戒斷中心": "醫療部身心醫學科",
+            "醫療部骨科部": "醫療部骨科部",
+            "醫療部骨科部脊椎外科": "醫療部骨科部",
+            "醫療部麻醉部一般麻醉科": "醫療部麻醉部",
+            "醫療部麻醉部恢復照護科": "醫療部麻醉部",
+            "長照管理中心嘉義市服務組嘉市慈濟居家長照機構": "長照管理中心",
+            "長照管理中心輔導訓練組": "長照管理中心",
+            "長照管理中心雲林服務組": "長照管理中心",
+            "院長室": "院長室",
+            "院長室受試者保護中心": "院長室",
+            "院長室永續發展組": "院長室",
+            "院長室永續中心": "院長室",
+            "院長室發展中心": "院長室",
+            "院長室健康資料中心": "院長室",
+            "院長室秘書組": "院長室",
+            "院長室精實醫療中心": "院長室",
+            "院長室醫務行政組": "院長室",
+            "院長室醫院發展組": "院長室",
+            "預防醫學中心行政組": "預防醫學中心",
+            "預防醫學中心": "預防醫學中心",
+            "慈濟醫療財團法人資源管理室": "資源管理室",
+            "慈濟醫療財團法人資訊中心南區資訊室": "南區資訊室",
+            "慈濟醫療財團法人資訊中心南區資訊室系統工程組": "南區資訊室"
+        };
+
+        const DIRECTOR_NAMES_HQ = ["賴寧生", "陳金城", "簡瑞騰", "賴俊良", "林庭光", "曾國枝", "劉鎮榮", "陳祖裕"];
+
+        // Global Data Store
+        let rawData = [];
+        let filteredData = [];
+        let hospitalTrendChart, deptTrendChart, directorTrendChart;
+
+        // --- STREAMING_CHUNK:Unified Day Bucket Classification Helper ---
+        /**
+         * Standardized Day Bucket Classification Helper
+         * Ensures airtight categorization without dropping float values or causing edge-case gaps.
+         */
+        function getDayBucket(days) {
+            if (days < 1) return '0';
+            if (days <= 3) return '1-3';
+            if (days <= 7) return '4-7';
+            if (days <= 14) return '8-14';
+            return '15+';
+        }
+
+        // --- Mock Data Generator for Initial Render ---
+        function generateMockData() {
+            const depts = Object.keys(DEPT_MAPPING);
+            const forms = ["簽核請示單", "採購申請單", "人事異動單", "經費核銷單"];
+            const dates = ["2026-W36", "2026-W37", "2026-W38", "2026-W39", "2026-W40"];
+            
+            let mock = [];
+            let seq = 1;
+
+            dates.forEach(date => {
+                for (let i = 0; i < 60; i++) {
+                    const rawDept = depts[Math.floor(Math.random() * depts.length)];
+                    let signer = "同仁" + Math.floor(Math.random() * 50);
+                    
+                    // Inject Directors randomly
+                    if (Math.random() < 0.15) {
+                        if (rawDept.includes("院長室")) {
+                            const name = DIRECTOR_NAMES_HQ[Math.floor(Math.random() * DIRECTOR_NAMES_HQ.length)];
+                            signer = Math.random() < 0.3 ? name + "代" : name;
+                        } else if (rawDept.includes("斗六慈院")) {
+                            signer = Math.random() < 0.5 ? "簡瑞騰代" : "簡瑞騰";
+                        }
+                    }
+
+                    const personalDays = Math.floor(Math.random() * 18);
+
+                    mock.push({
+                        seq: seq++,
+                        date: date,
+                        rawDept: rawDept,
+                        dept: DEPT_MAPPING[rawDept] || rawDept,
+                        signer: signer,
+                        personalDays: personalDays,
+                        overdueDays: Math.max(0, personalDays - 7),
+                        form: forms[Math.floor(Math.random() * forms.length)],
+                        status: Math.random() > 0.2 ? "簽核中" : "已完成",
+                        creator: "同仁" + Math.floor(Math.random() * 100),
+                        creatorDept: rawDept,
+                        speed: Math.random() > 0.8 ? "急件" : "普通",
+                        category: "一般簽核"
+                    });
+                }
+            });
+            return mock;
+        }
+
+        // --- Helper: Check if Director ---
+        function isDirector(item) {
+            const rawDept = (item.rawDept || "").trim();
+            const dept = (item.dept || "").trim();
+            const signer = (item.signer || "").trim();
+
+            const hqNames = [
+                "賴寧生", "陳金城", "簡瑞騰", "賴俊良", "林庭光", "曾國枝", "劉鎮榮", "陳祖裕",
+                "賴寧生代", "陳金城代", "簡瑞騰代", "賴俊良代", "林庭光代", "曾國枝代", "劉鎮榮代", "陳祖裕代"
+            ];
+            const dlNames = ["簡瑞騰", "簡瑞騰代", "簡瑞騰斗六"];
+
+            if (rawDept === "院長室" || rawDept.startsWith("院長室") || dept === "院長室") {
+                if (hqNames.some(name => signer.includes(name))) return true;
+            }
+            if (rawDept === "斗六慈院" || rawDept.startsWith("斗六慈院") || dept === "斗六慈院") {
+                if (dlNames.some(name => signer.includes(name))) return true;
+            }
+            return false;
+        }
+
+        // --- Toast Notification Helper ---
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById("toastNotification");
+            const msg = document.getElementById("toastMessage");
+            const icon = document.getElementById("toastIcon");
+
+            msg.innerText = message;
+            if (type === 'error') {
+                icon.className = "fa-solid fa-circle-exclamation text-rose-400 text-lg";
+            } else if (type === 'warning') {
+                icon.className = "fa-solid fa-triangle-exclamation text-amber-400 text-lg";
+            } else {
+                icon.className = "fa-solid fa-circle-check text-emerald-400 text-lg";
+            }
+
+            toast.classList.remove("translate-y-20", "opacity-0", "pointer-events-none");
+            
+            setTimeout(() => {
+                toast.classList.add("translate-y-20", "opacity-0", "pointer-events-none");
+            }, 3500);
+        }
+
+        // --- STREAMING_CHUNK:Robust Value Parsing Logic ---
+        function getFieldValue(row, possibleKeys, defaultValue = '') {
+            const keys = Object.keys(row);
+            for (const key of keys) {
+                const cleanKey = key.trim().replace(/\s+/g, '');
+                for (const target of possibleKeys) {
+                    if (cleanKey === target || cleanKey.includes(target)) {
+                        if (row[key] !== undefined && row[key] !== null) {
+                            return row[key];
+                        }
+                    }
+                }
+            }
+            return defaultValue;
+        }
+
+        /**
+         * Enhanced number parsing supporting floats, text strings with numbers (e.g. "3.5天"), and robust fallbacks
+         */
+        function parseNumberValue(val) {
+            if (val === undefined || val === null || val === '') return 0;
+            if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, val);
+            
+            const str = String(val).trim();
+            const match = str.match(/[-+]?\d*\.?\d+/);
+            if (match) {
+                const num = parseFloat(match[0]);
+                return isNaN(num) ? 0 : Math.max(0, num);
+            }
+            return 0;
+        }
+
+        // --- STREAMING_CHUNK:Tab switching implementation ---
+        function switchTab(tabId) {
+            const tabs = ['tab1', 'tab2', 'tab3', 'tab4', 'tab5'];
+            tabs.forEach(id => {
+                const section = document.getElementById(id);
+                const btn = document.getElementById('btn-' + id);
+                if (section) {
+                    if (id === tabId) {
+                        section.classList.remove('hidden');
+                    } else {
+                        section.classList.add('hidden');
+                    }
+                }
+                if (btn) {
+                    const isTab5 = id === 'tab5';
+                    if (id === tabId) {
+                        const activeColor = isTab5 ? 'text-amber-400 border-amber-400' : 'text-emerald-400 border-emerald-400';
+                        const extraClass = isTab5 ? ' ml-auto' : '';
+                        btn.className = `tab-btn py-3 text-sm font-medium ${activeColor} border-b-2 flex items-center space-x-2${extraClass}`;
+                    } else {
+                        const inactiveColor = isTab5 ? 'text-amber-400 hover:text-amber-300' : 'text-slate-400 hover:text-slate-200';
+                        const extraClass = isTab5 ? ' ml-auto' : '';
+                        btn.className = `tab-btn py-3 text-sm font-medium ${inactiveColor} border-b-2 border-transparent flex items-center space-x-2${extraClass}`;
+                    }
+                }
+            });
+
+            // Trigger chart resize on tab reveal to prevent canvas rendering issues from hidden containers
+            setTimeout(() => {
+                if (tabId === 'tab1' && hospitalTrendChart) hospitalTrendChart.resize();
+                if (tabId === 'tab3' && deptTrendChart) deptTrendChart.resize();
+                if (tabId === 'tab5' && directorTrendChart) directorTrendChart.resize();
+            }, 50);
+        }
+
+        // --- Initialization ---
+        window.onload = function() {
+            rawData = generateMockData();
+            initDateFilter();
+            processAndRender();
+        };
+
+        function initDateFilter() {
+            const dates = [...new Set(rawData.map(d => d.date))].sort();
+            const select = document.getElementById("dateSelect");
+            let optionsHtml = '<option value="ALL">全時間段/全部紀錄</option>';
+            dates.forEach(d => {
+                optionsHtml += `<option value="${d}">${d}</option>`;
+            });
+            select.innerHTML = optionsHtml;
+        }
+
+        function handleDateChange() {
+            processAndRender();
+        }
+
+        function processAndRender() {
+            const selectedDate = document.getElementById("dateSelect").value;
+            filteredData = selectedDate === "ALL" ? rawData : rawData.filter(d => d.date === selectedDate);
+
+            // Separate Director data vs Hospital General data
+            const generalData = filteredData.filter(d => !isDirector(d));
+            const directorData = filteredData.filter(d => isDirector(d));
+
+            renderTab1(generalData);
+            renderTab2(generalData);
+            renderTab3(generalData);
+            renderTab4(filteredData);
+            renderTab5(directorData);
+        }
+
+        // --- STREAMING_CHUNK:Rendering Tab 1 Full Hospital Statistics ---
+        function renderTab1(data) {
+            const total = data.length;
+            const d0 = data.filter(d => getDayBucket(d.personalDays) === '0').length;
+            const d1_3 = data.filter(d => getDayBucket(d.personalDays) === '1-3').length;
+            const d4_7 = data.filter(d => getDayBucket(d.personalDays) === '4-7').length;
+            const d8_14 = data.filter(d => getDayBucket(d.personalDays) === '8-14').length;
+            const d15 = data.filter(d => getDayBucket(d.personalDays) === '15+').length;
+
+            const overdueCount = d8_14 + d15;
+            const overdueRate = total > 0 ? ((overdueCount / total) * 100).toFixed(2) : "0.00";
+            const avgDays = total > 0 ? (data.reduce((a, b) => a + b.personalDays, 0) / total).toFixed(2) : "0.00";
+
+            document.getElementById("kpi-total").innerText = total;
+            document.getElementById("kpi-0d").innerText = d0;
+            document.getElementById("kpi-0d-rate").innerText = total > 0 ? (d0 / total * 100).toFixed(1) + "%" : "0%";
+            document.getElementById("kpi-1-3d").innerText = d1_3;
+            document.getElementById("kpi-1-3d-rate").innerText = total > 0 ? (d1_3 / total * 100).toFixed(1) + "%" : "0%";
+            document.getElementById("kpi-4-7d").innerText = d4_7;
+            document.getElementById("kpi-4-7d-rate").innerText = total > 0 ? (d4_7 / total * 100).toFixed(1) + "%" : "0%";
+            document.getElementById("kpi-8-14d").innerText = d8_14;
+            document.getElementById("kpi-8-14d-rate").innerText = total > 0 ? (d8_14 / total * 100).toFixed(1) + "%" : "0%";
+            document.getElementById("kpi-15d").innerText = d15;
+            document.getElementById("kpi-15d-rate").innerText = total > 0 ? (d15 / total * 100).toFixed(1) + "%" : "0%";
+            document.getElementById("kpi-overdue-rate").innerText = overdueRate + "%";
+            document.getElementById("kpi-avg-days").innerText = avgDays + " 天";
+
+            // Render Chart 1
+            const dates = [...new Set(rawData.map(d => d.date))].sort();
+            const series0 = [], series1_3 = [], series4_7 = [], series8_14 = [], series15 = [], avgLine = [], rateLine = [];
+
+            dates.forEach(dt => {
+                const dayData = rawData.filter(d => d.date === dt && !isDirector(d));
+                const t = dayData.length;
+                series0.push(dayData.filter(d => getDayBucket(d.personalDays) === '0').length);
+                series1_3.push(dayData.filter(d => getDayBucket(d.personalDays) === '1-3').length);
+                series4_7.push(dayData.filter(d => getDayBucket(d.personalDays) === '4-7').length);
+                series8_14.push(dayData.filter(d => getDayBucket(d.personalDays) === '8-14').length);
+                series15.push(dayData.filter(d => getDayBucket(d.personalDays) === '15+').length);
+                
+                const avg = t > 0 ? (dayData.reduce((a, b) => a + b.personalDays, 0) / t).toFixed(2) : 0;
+                const rate = t > 0 ? ((dayData.filter(d => d.personalDays > 7).length / t) * 100).toFixed(2) : 0;
+                avgLine.push(avg);
+                rateLine.push(rate);
+            });
+
+            const ctx = document.getElementById("fullHospitalTrendChart").getContext("2d");
+            if (hospitalTrendChart) hospitalTrendChart.destroy();
+
+            hospitalTrendChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        { label: '0天', data: series0, backgroundColor: '#10b981', stack: 'stack1' },
+                        { label: '1~3天', data: series1_3, backgroundColor: '#3b82f6', stack: 'stack1' },
+                        { label: '4~7天', data: series4_7, backgroundColor: '#06b6d4', stack: 'stack1' },
+                        { label: '8~14天', data: series8_14, backgroundColor: '#8b5cf6', stack: 'stack1' },
+                        { label: '15天以上', data: series15, backgroundColor: '#ef4444', stack: 'stack1' },
+                        { label: '平均天數', data: avgLine, type: 'line', borderColor: '#f97316', backgroundColor: '#f97316', yAxisID: 'y', tension: 0.2, datalableColor: '#2563eb' },
+                        { label: '7天以上逾期率(%)', data: rateLine, type: 'line', borderColor: '#1e3a8a', backgroundColor: '#1e3a8a', yAxisID: 'y1', tension: 0.2, datalableColor: '#dc2626', valueSuffix: '%' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        datalabels: {
+                            display: function(context) {
+                                return context.dataset.data[context.dataIndex] > 0;
+                            },
+                            color: function(context) {
+                                return context.dataset.datalableColor || '#374151';
+                            },
+                            font: { weight: 'bold', size: 10 },
+                            formatter: function(value, context) {
+                                return value + (context.dataset.valueSuffix || '');
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, position: 'left', title: { display: true, text: '件數 / 天數' } },
+                        y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: '逾期率 (%)' } }
+                    }
+                }
+            });
+        }
+
+        // --- STREAMING_CHUNK:Rendering Tab 2 Department Statistics Table ---
+        function renderTab2(data) {
+            const deptGroup = {};
+            data.forEach(d => {
+                if (!deptGroup[d.dept]) {
+                    deptGroup[d.dept] = { total: 0, d0: 0, d1_3: 0, d4_7: 0, d8_14: 0, d15: 0, totalDays: 0 };
+                }
+                const g = deptGroup[d.dept];
+                g.total++;
+                g.totalDays += d.personalDays;
+                
+                const bucket = getDayBucket(d.personalDays);
+                if (bucket === '0') g.d0++;
+                else if (bucket === '1-3') g.d1_3++;
+                else if (bucket === '4-7') g.d4_7++;
+                else if (bucket === '8-14') g.d8_14++;
+                else g.d15++;
+            });
+
+            const tbody = document.getElementById("deptTableBody");
+            const rows = [];
+
+            Object.keys(deptGroup).sort().forEach(dept => {
+                const g = deptGroup[dept];
+                const overdueRate = g.total > 0 ? (((g.d8_14 + g.d15) / g.total) * 100).toFixed(1) : "0.0";
+                const avgDays = g.total > 0 ? (g.totalDays / g.total).toFixed(2) : "0.00";
+
+                rows.push(`
+                    <tr class="hover:bg-slate-50 border-b">
+                        <td class="px-4 py-3 font-medium text-slate-800">${dept}</td>
+                        <td class="px-4 py-3 text-right font-bold">${g.total}</td>
+                        <td class="px-4 py-3 text-right text-emerald-600">${g.d0} (${(g.d0/g.total*100).toFixed(0)}%)</td>
+                        <td class="px-4 py-3 text-right text-blue-600">${g.d1_3} (${(g.d1_3/g.total*100).toFixed(0)}%)</td>
+                        <td class="px-4 py-3 text-right text-cyan-600">${g.d4_7} (${(g.d4_7/g.total*100).toFixed(0)}%)</td>
+                        <td class="px-4 py-3 text-right text-purple-600">${g.d8_14} (${(g.d8_14/g.total*100).toFixed(0)}%)</td>
+                        <td class="px-4 py-3 text-right text-rose-600">${g.d15} (${(g.d15/g.total*100).toFixed(0)}%)</td>
+                        <td class="px-4 py-3 text-right font-bold ${overdueRate > 10 ? 'text-rose-600':'text-slate-700'}">${overdueRate}%</td>
+                        <td class="px-4 py-3 text-right">${avgDays}</td>
+                    </tr>
+                `);
+            });
+
+            tbody.innerHTML = rows.join('');
+        }
+
+        function filterDeptTable() {
+            const query = document.getElementById("deptSearchInput").value.toLowerCase();
+            const rows = document.querySelectorAll("#deptTableBody tr");
+            rows.forEach(row => {
+                const text = row.cells[0].innerText.toLowerCase();
+                row.style.display = text.includes(query) ? "" : "none";
+            });
+        }
+
+        // --- STREAMING_CHUNK:Rendering Tab 3 Department Trend Charts ---
+        function renderTab3(data) {
+            initDeptSelect(data);
+            renderDeptTrendChart();
+        }
+
+        function initDeptSelect(data) {
+            const depts = [...new Set(data.map(d => d.dept))].sort();
+            const select = document.getElementById("deptTrendSelect");
+            const currentVal = select.value;
+            let optionsHtml = "";
+            depts.forEach(d => {
+                optionsHtml += `<option value="${d}">${d}</option>`;
+            });
+            select.innerHTML = optionsHtml;
+            if (currentVal && depts.includes(currentVal)) {
+                select.value = currentVal;
+            }
+        }
+
+        function renderDeptTrendChart() {
+            const dept = document.getElementById("deptTrendSelect").value;
+            if (!dept) return;
+
+            const dates = [...new Set(rawData.map(d => d.date))].sort();
+            const normalBar = [], overdueBar = [], avgLine = [], rateLine = [];
+
+            let total0_7 = 0, total7Plus = 0, totalDaysSum = 0, totalCountSum = 0;
+
+            dates.forEach(dt => {
+                const deptData = rawData.filter(d => d.date === dt && d.dept === dept && !isDirector(d));
+                const normal = deptData.filter(d => d.personalDays <= 7).length;
+                const overdue = deptData.filter(d => d.personalDays > 7).length;
+                const t = deptData.length;
+
+                normalBar.push(normal);
+                overdueBar.push(overdue);
+
+                total0_7 += normal;
+                total7Plus += overdue;
+                totalCountSum += t;
+                const daysSum = deptData.reduce((a, b) => a + b.personalDays, 0);
+                totalDaysSum += daysSum;
+
+                avgLine.push(t > 0 ? (daysSum / t).toFixed(2) : 0);
+                rateLine.push(t > 0 ? ((overdue / t) * 100).toFixed(2) : 0);
+            });
+
+            // Update Summaries
+            document.getElementById("deptSummary0-7").innerText = `0~7天件數: ${total0_7}`;
+            document.getElementById("deptSummary7+").innerText = `7天以上件數: ${total7Plus}`;
+            document.getElementById("deptSummaryAvg").innerText = `平均天數: ${totalCountSum > 0 ? (totalDaysSum/totalCountSum).toFixed(2) : 0}`;
+            document.getElementById("deptSummaryRate").innerText = `逾期率: ${totalCountSum > 0 ? ((total7Plus/totalCountSum)*100).toFixed(2) : 0}%`;
+
+            const ctx = document.getElementById("deptTrendChart").getContext("2d");
+            if (deptTrendChart) deptTrendChart.destroy();
+
+            deptTrendChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        { label: '正常/非逾期件數 (0-7天)', data: normalBar, backgroundColor: '#1e3a8a', stack: 'stack1', datalableColor: '#ffffff' },
+                        { label: '逾期件數 (>7天)', data: overdueBar, backgroundColor: '#f97316', stack: 'stack1', datalableColor: '#ffffff' },
+                        { label: '平均天數', data: avgLine, type: 'line', borderColor: '#3b82f6', backgroundColor: '#3b82f6', yAxisID: 'y1', datalableColor: '#2563eb' },
+                        { label: '逾期率 (%)', data: rateLine, type: 'line', borderColor: '#ef4444', backgroundColor: '#ef4444', yAxisID: 'y1', datalableColor: '#dc2626', valueSuffix: '%' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        datalabels: {
+                            display: function(context) {
+                                return context.dataset.data[context.dataIndex] > 0;
+                            },
+                            color: function(context) {
+                                return context.dataset.datalableColor || '#374151';
+                            },
+                            font: { weight: 'bold', size: 10 },
+                            formatter: function(value, context) {
+                                return value + (context.dataset.valueSuffix || '');
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, position: 'left', title: { display: true, text: '件數 (0~180)' }, max: 180 },
+                        y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: '百分比 / 天數' } }
+                    }
+                }
+            });
+        }
+
+        // --- STREAMING_CHUNK:Rendering Tab 4 Full Document Details ---
+        function renderTab4(data) {
+            const filterDeptSelect = document.getElementById("detailDeptFilter");
+            const currentFilter = filterDeptSelect.value || "ALL";
+            
+            const depts = [...new Set(rawData.map(d => d.dept))].sort();
+            let optionsHtml = '<option value="ALL">全部單位</option>';
+            depts.forEach(d => {
+                optionsHtml += `<option value="${d}" ${d === currentFilter ? 'selected':''}>${d}</option>`;
+            });
+            filterDeptSelect.innerHTML = optionsHtml;
+
+            filterDetailTable();
+        }
+
+        function filterDetailTable() {
+            const query = document.getElementById("detailSearchInput").value.toLowerCase();
+            const deptFilter = document.getElementById("detailDeptFilter").value;
+            const tbody = document.getElementById("detailTableBody");
+
+            const filtered = filteredData.filter(d => {
+                const matchDept = deptFilter === "ALL" || d.dept === deptFilter;
+                const matchQuery = !query || d.signer.toLowerCase().includes(query) || d.form.toLowerCase().includes(query) || d.creator.toLowerCase().includes(query);
+                return matchDept && matchQuery;
+            });
+
+            const rows = [];
+            filtered.forEach(d => {
+                rows.push(`
+                    <tr class="hover:bg-slate-50 border-b">
+                        <td class="px-3 py-2">${d.seq}</td>
+                        <td class="px-3 py-2 text-slate-500 font-medium">${d.date}</td>
+                        <td class="px-3 py-2 font-medium">${d.dept}</td>
+                        <td class="px-3 py-2 text-slate-500">${d.rawDept}</td>
+                        <td class="px-3 py-2 font-semibold text-slate-700">${d.signer}</td>
+                        <td class="px-3 py-2 font-bold ${d.personalDays > 7 ? 'text-rose-600':'text-emerald-600'}">${d.personalDays} 天</td>
+                        <td class="px-3 py-2">${d.overdueDays} 天</td>
+                        <td class="px-3 py-2">${d.form}</td>
+                        <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-[10px] ${d.status==='已完成'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${d.status}</span></td>
+                        <td class="px-3 py-2">${d.creator}</td>
+                        <td class="px-3 py-2">${d.creatorDept}</td>
+                        <td class="px-3 py-2">${d.speed}</td>
+                        <td class="px-3 py-2">${d.category}</td>
+                    </tr>
+                `);
+            });
+            tbody.innerHTML = rows.join('');
+        }
+
+        // --- STREAMING_CHUNK:Rendering Tab 5 Executive Director Section ---
+        function renderTab5(directorData) {
+            const total = directorData.length;
+            const d0_7 = directorData.filter(d => d.personalDays <= 7).length;
+            const d7Plus = directorData.filter(d => d.personalDays > 7).length;
+            const avgDays = total > 0 ? (directorData.reduce((a, b) => a + b.personalDays, 0) / total).toFixed(2) : 0;
+            const overdueRate = total > 0 ? ((d7Plus / total) * 100).toFixed(2) : 0;
+
+            document.getElementById("dir-kpi-0-7").innerText = d0_7;
+            document.getElementById("dir-kpi-7plus").innerText = d7Plus;
+            document.getElementById("dir-kpi-avg").innerText = avgDays + " 天";
+            document.getElementById("dir-kpi-rate").innerText = overdueRate + "%";
+
+            // Group Director Name Merging (e.g. 賴寧生 + 賴寧生代)
+            const mapMergedName = (name) => {
+                if (name.includes("簡瑞騰")) return "簡瑞騰";
+                if (name.includes("賴寧生")) return "賴寧生";
+                if (name.includes("陳金城")) return "陳金城";
+                if (name.includes("賴俊良")) return "賴俊良";
+                if (name.includes("林庭光")) return "林庭光";
+                if (name.includes("曾國枝")) return "曾國枝";
+                if (name.includes("劉鎮榮")) return "劉鎮榮";
+                if (name.includes("陳祖裕")) return "陳祖裕";
+                return name;
+            };
+
+            const dirGroup = {};
+            directorData.forEach(d => {
+                const mergedName = mapMergedName(d.signer);
+                const key = `${d.dept}-${mergedName}`;
+                if (!dirGroup[key]) {
+                    dirGroup[key] = { dept: d.dept, name: mergedName, total: 0, d0_7: 0, d7Plus: 0, totalDays: 0 };
+                }
+                const g = dirGroup[key];
+                g.total++;
+                g.totalDays += d.personalDays;
+                if (d.personalDays <= 7) g.d0_7++;
+                else g.d7Plus++;
+            });
+
+            const tbody = document.getElementById("directorTableBody");
+            const rows = [];
+
+            Object.values(dirGroup).forEach(g => {
+                rows.push(`
+                    <tr class="hover:bg-slate-50 border-b">
+                        <td class="px-4 py-3">${g.dept}</td>
+                        <td class="px-4 py-3 font-bold text-slate-800">${g.name} (含代理人)</td>
+                        <td class="px-4 py-3 text-right font-bold">${g.total}</td>
+                        <td class="px-4 py-3 text-right text-emerald-600">${g.d0_7}</td>
+                        <td class="px-4 py-3 text-right text-rose-600">${g.d7Plus}</td>
+                        <td class="px-4 py-3 text-right">${(g.totalDays / g.total).toFixed(2)}</td>
+                        <td class="px-4 py-3 text-right font-bold text-amber-600">${((g.d7Plus / g.total) * 100).toFixed(1)}%</td>
+                    </tr>
+                `);
+            });
+
+            tbody.innerHTML = rows.join('');
+
+            // Director Trend Chart
+            const dates = [...new Set(rawData.map(d => d.date))].sort();
+            const normalBar = [], overdueBar = [], avgLine = [], rateLine = [];
+
+            dates.forEach(dt => {
+                const dayData = rawData.filter(d => d.date === dt && isDirector(d));
+                const normal = dayData.filter(d => d.personalDays <= 7).length;
+                const overdue = dayData.filter(d => d.personalDays > 7).length;
+                const t = dayData.length;
+
+                normalBar.push(normal);
+                overdueBar.push(overdue);
+                avgLine.push(t > 0 ? (dayData.reduce((a,b) => a + b.personalDays, 0) / t).toFixed(2) : 0);
+                rateLine.push(t > 0 ? ((overdue / t) * 100).toFixed(2) : 0);
+            });
+
+            const ctx = document.getElementById("directorTrendChart").getContext("2d");
+            if (directorTrendChart) directorTrendChart.destroy();
+
+            directorTrendChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        { label: '0~7天件數', data: normalBar, backgroundColor: '#0f766e', stack: 'stack1', datalableColor: '#ffffff' },
+                        { label: '>7天逾期件數', data: overdueBar, backgroundColor: '#f59e0b', stack: 'stack1', datalableColor: '#ffffff' },
+                        { label: '平均天數', data: avgLine, type: 'line', borderColor: '#2563eb', backgroundColor: '#2563eb', yAxisID: 'y1', datalableColor: '#2563eb' },
+                        { label: '逾期率 (%)', data: rateLine, type: 'line', borderColor: '#dc2626', backgroundColor: '#dc2626', yAxisID: 'y1', datalableColor: '#dc2626', valueSuffix: '%' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        datalabels: {
+                            display: function(context) {
+                                return context.dataset.data[context.dataIndex] > 0;
+                            },
+                            color: function(context) {
+                                return context.dataset.datalableColor || '#374151';
+                            },
+                            font: { weight: 'bold', size: 10 },
+                            formatter: function(value, context) {
+                                return value + (context.dataset.valueSuffix || '');
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, position: 'left', title: { display: true, text: '件數' } },
+                        y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: '逾期率 (%)' } }
+                    }
+                }
+            });
+        }
+
+        // --- STREAMING_CHUNK:Interactive Modal Card Filtering ---
+        function openFilteredList(type) {
+            const generalData = filteredData.filter(d => !isDirector(d));
+            let list = [];
+            let title = "";
+
+            switch(type) {
+                case 'ALL': 
+                    list = generalData; 
+                    title = "全院總件數清單"; 
+                    break;
+                case '0': 
+                    list = generalData.filter(d => getDayBucket(d.personalDays) === '0'); 
+                    title = "個人天數 0 天清單"; 
+                    break;
+                case '1-3': 
+                    list = generalData.filter(d => getDayBucket(d.personalDays) === '1-3'); 
+                    title = "個人天數 1~3 天清單"; 
+                    break;
+                case '4-7': 
+                    list = generalData.filter(d => getDayBucket(d.personalDays) === '4-7'); 
+                    title = "個人天數 4~7 天清單"; 
+                    break;
+                case '8-14': 
+                    list = generalData.filter(d => getDayBucket(d.personalDays) === '8-14'); 
+                    title = "個人天數 8~14 天清單"; 
+                    break;
+                case '15+': 
+                    list = generalData.filter(d => getDayBucket(d.personalDays) === '15+'); 
+                    title = "個人天數 15天以上清單"; 
+                    break;
+            }
+
+            document.getElementById("modalTitle").innerText = `${title} (${list.length} 件)`;
+            const tbody = document.getElementById("modalTableBody");
+            const rows = [];
+
+            list.forEach(d => {
+                rows.push(`
+                    <tr class="hover:bg-slate-50 border-b">
+                        <td class="px-3 py-2 text-slate-500 font-medium">${d.date}</td>
+                        <td class="px-3 py-2 font-medium">${d.dept}</td>
+                        <td class="px-3 py-2">${d.signer}</td>
+                        <td class="px-3 py-2 font-bold ${d.personalDays > 7 ? 'text-rose-600' : 'text-emerald-600'}">${d.personalDays} 天</td>
+                        <td class="px-3 py-2">${d.form}</td>
+                        <td class="px-3 py-2">${d.creator}</td>
+                        <td class="px-3 py-2">${d.speed}</td>
+                    </tr>
+                `);
+            });
+
+            tbody.innerHTML = rows.join('');
+            document.getElementById("modalBackdrop").classList.remove("hidden");
+        }
+
+        function closeModal() {
+            document.getElementById("modalBackdrop").classList.add("hidden");
+        }
+
+        // --- STREAMING_CHUNK:Enhanced Excel Date Formatting Helper ---
+        function formatExcelDateValue(val) {
+            if (val === undefined || val === null || val === '') return '未知日期';
+            if (val instanceof Date) {
+                if (isNaN(val.getTime())) return '未知日期';
+                const y = val.getFullYear();
+                const m = String(val.getMonth() + 1).padStart(2, '0');
+                const d = String(val.getDate()).padStart(2, '0');
+                return `${y}/${m}/${d}`;
+            }
+            if (typeof val === 'number') {
+                if (typeof XLSX !== 'undefined' && XLSX.SSF && XLSX.SSF.parse_date_code) {
+                    const dateObj = XLSX.SSF.parse_date_code(val);
+                    if (dateObj) {
+                        const y = dateObj.y;
+                        const m = String(dateObj.m).padStart(2, '0');
+                        const d = String(dateObj.d).padStart(2, '0');
+                        return `${y}/${m}/${d}`;
+                    }
+                }
+            }
+            const str = String(val).trim();
+            // Normalize standard date string YYYY/M/D or YYYY-M-D -> YYYY/MM/DD
+            const dateMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+            if (dateMatch) {
+                const y = dateMatch[1];
+                const m = String(dateMatch[2]).padStart(2, '0');
+                const d = String(dateMatch[3]).padStart(2, '0');
+                return `${y}/${m}/${d}`;
+            }
+            return str;
+        }
+
+        // --- STREAMING_CHUNK:File Upload and Parser Engine ---
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            showToast("正在解析 Excel 檔案，請稍候...", "warning");
+
+            setTimeout(() => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array', cellDates: true, dateNF: 'yyyy/mm/dd' });
+                        
+                        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+                            showToast("無法讀取 Excel 工作表，請檢查檔案格式！", "error");
+                            return;
+                        }
+
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false });
+
+                        if (!json || json.length === 0) {
+                            showToast("Excel 檔案內容為空或無法解析表格資料！", "error");
+                            return;
+                        }
+
+                        // Flexible Column Mapping Rules
+                        const parsedData = json.map((row, index) => {
+                            const rawDept = String(getFieldValue(row, ['單位', '歸屬部門', '部門', '簽核者單位', '原始單位', '單位名稱', '當前簽核單位'], '未知單位')).trim();
+                            const mappedDept = DEPT_MAPPING[rawDept] || rawDept;
+                            const signer = String(getFieldValue(row, ['簽核者', '簽核人員', '姓名', '處理人', '當前簽核人'], '無')).trim();
+                            const personalDays = parseNumberValue(getFieldValue(row, ['個人天數', '關聯天數', '停留天數', '個人簽核天數', '天數'], 0));
+                            const overdueDays = parseNumberValue(getFieldValue(row, ['逾期天數', '逾期', '超過天數'], Math.max(0, personalDays - 7)));
+                            const rawDate = getFieldValue(row, ['監測日期', '統計日期', '週別', '週次', '日期', '時間', '日期/時間', 'date', 'Date'], '匯入資料');
+                            const date = formatExcelDateValue(rawDate);
+
+                            return {
+                                seq: parseNumberValue(getFieldValue(row, ['序號', '項次', '編號', 'No'], index + 1)) || (index + 1),
+                                date: date,
+                                rawDept: rawDept,
+                                dept: mappedDept,
+                                signer: signer,
+                                personalDays: personalDays,
+                                overdueDays: overdueDays,
+                                form: String(getFieldValue(row, ['表單', '表單名稱', '公文名稱', '表單標題', '主旨', '單號'], '未標示')).trim(),
+                                status: String(getFieldValue(row, ['表單狀態', '狀態', '簽核狀態'], '進行中')).trim(),
+                                creator: String(getFieldValue(row, ['創簽人', '申請人', '發起人', '填單人'], '-')).trim(),
+                                creatorDept: String(getFieldValue(row, ['創簽人部門', '創簽部門', '申請部門', '填單部門'], '-')).trim(),
+                                speed: String(getFieldValue(row, ['速別', '件別', '急迫性'], '普通')).trim(),
+                                category: String(getFieldValue(row, ['簽核類別', '類別', '表單類別'], '一般簽核')).trim()
+                            };
+                        });
+
+                        rawData = parsedData;
+                        initDateFilter();
+                        processAndRender();
+                        showToast(`Excel 匯入成功！共載入 ${parsedData.length} 筆公文資料`, "success");
+                    } catch (err) {
+                        console.error("Excel Parsing Error:", err);
+                        showToast("Excel 解析失敗，請確認檔案格式 (.xlsx / .xls)！", "error");
+                    } finally {
+                        event.target.value = ''; // Reset file input
+                    }
+                };
+
+                reader.onerror = function() {
+                    showToast("讀取檔案失敗，請重新選擇檔案！", "error");
+                    event.target.value = '';
+                };
+
+                reader.readAsArrayBuffer(file);
+            }, 50);
+        }
+
+        // --- Export CSV ---
+        function exportToCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+            csvContent += "序號,監測日期,歸屬單位,原始單位,簽核者,個人天數,逾期天數,表單,表單狀態,創簽人,創簽人部門,速別,簽核類別\n";
+
+            filteredData.forEach(d => {
+                csvContent += `${d.seq},"${d.date}","${d.dept}","${d.rawDept}","${d.signer}",${d.personalDays},${d.overdueDays},"${d.form}","${d.status}","${d.creator}","${d.creatorDept}","${d.speed}","${d.category}"\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `逾期公文明細_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
